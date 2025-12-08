@@ -40,27 +40,19 @@ COLORS = [
 # ================= 标签定义 =================
 
 def get_period_labels(cn_only=False):
+    """
+    节次标签（仅英文和数字）
+    移除所有中文标签，只保留英文和数字格式
+    """
     labels = []
-    # 中文：第一节到第十节
-    labels.extend([f"第{i}节" for i in ["一","二","三","四","五","六","七","八","九","十"]])
-    # 中文数字节次：第1-10节
-    labels.extend([f"第{i}节" for i in range(1, 11)])
-    # 中文加时：加时赛、加时赛1-7、加时一-加时七、加时1-加时7、加时赛一-加时赛七
-    cn_nums = ["一","二","三","四","五","六","七"]
-    labels.extend(["加时赛"])
-    labels.extend([f"加时赛{i}" for i in range(1, 8)])
-    labels.extend([f"加时{i}" for i in cn_nums])            # 加时一...
-    labels.extend([f"加时{i}" for i in range(1, 8)])        # 加时1...
-    labels.extend([f"加时赛{i}" for i in cn_nums])          # 加时赛一...
-    if not cn_only:
-        # 英文：FIRST, SECOND, THIRD, FOURTH, OT, OVERTIME, OT1-OT7, OVERTIME1-7
-        labels.extend(["FIRST", "SECOND", "THIRD", "FOURTH", "OT", "OVERTIME"])
-        labels.extend([f"OT{i}" for i in range(1, 8)])
-        labels.extend([f"OVERTIME{i}" for i in range(1, 8)])
-        # 缩写：1st, 2nd, 3rd, 4th, overtime, ot1-ot7, overtime1-7
-        labels.extend(["1st", "2nd", "3rd", "4th", "overtime"])
-        labels.extend([f"ot{i}" for i in range(1, 8)])
-        labels.extend([f"overtime{i}" for i in range(1, 8)])
+    # 英文：FIRST, SECOND, THIRD, FOURTH, OT, OVERTIME, OT1-OT7, OVERTIME1-7
+    labels.extend(["FIRST", "SECOND", "THIRD", "FOURTH", "OT", "OVERTIME"])
+    labels.extend([f"OT{i}" for i in range(1, 8)])
+    labels.extend([f"OVERTIME{i}" for i in range(1, 8)])
+    # 缩写：1st, 2nd, 3rd, 4th, overtime, ot1-ot7, overtime1-7
+    labels.extend(["1st", "2nd", "3rd", "4th", "overtime"])
+    labels.extend([f"ot{i}" for i in range(1, 8)])
+    labels.extend([f"overtime{i}" for i in range(1, 8)])
     return labels
 
 def get_score_labels():
@@ -105,23 +97,19 @@ def get_time_labels():
 # ================= 图像处理核心 =================
 
 def load_font(text, size):
-    is_chinese = any(u'\u4e00' <= char <= u'\u9fff' for char in text)
-    font_list = FONT_CHINESE if is_chinese else FONT_DIGITAL
-    
-    # 尝试加载字体，失败则用默认
-    for f_path in font_list:
+    """
+    加载字体（仅英文和数字，使用数字字体）
+    """
+    # 尝试加载数字字体
+    for f_path in FONT_DIGITAL:
         try:
-            # 优先尝试在当前目录查找，或者在系统字体目录查找
             return ImageFont.truetype(f_path, size)
         except:
             continue
     
-    # 如果都失败，尝试直接加载系统字体名 (Windows特有)
+    # 如果都失败，尝试系统字体
     try:
-        if is_chinese:
-            return ImageFont.truetype("simhei.ttf", size)
-        else:
-            return ImageFont.truetype("arial.ttf", size)
+        return ImageFont.truetype("arial.ttf", size)
     except:
         pass
         
@@ -248,10 +236,6 @@ def sanitize_filename(text):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only_cn", action="store_true",
-                        help="只生成中文标签（仅节次相关），不生成数字比分/时间/24秒")
-    parser.add_argument("--cn_period_only", action="store_true",
-                        help="节次标签仅使用中文变体，去除英文/缩写")
     parser.add_argument("--train_samples", type=int, default=SAMPLES_PER_CLASS_TRAIN,
                         help="每类训练样本数")
     parser.add_argument("--test_samples", type=int, default=SAMPLES_PER_CLASS_TEST,
@@ -267,15 +251,12 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # 准备任务
-    period_labels = get_period_labels(cn_only=(args.cn_period_only or args.only_cn))
-    if args.only_cn:
-        tasks = [period_labels]
-    else:
-        score_labels = get_score_labels()
-        shotclock_labels = get_shotclock_labels()
-        time_labels = get_time_labels()
-        tasks = [score_labels, shotclock_labels, time_labels, period_labels]
+    # 准备任务（仅英文和数字）
+    score_labels = get_score_labels()
+    shotclock_labels = get_shotclock_labels()
+    time_labels = get_time_labels()
+    period_labels = get_period_labels()  # 只生成英文节次
+    tasks = [score_labels, shotclock_labels, time_labels, period_labels]
 
     all_labels = set()
     for t in tasks:
@@ -283,12 +264,11 @@ def main():
     
     # 打印统计信息
     print("=" * 60)
-    print("数据集生成统计:")
-    if not args.only_cn:
-        print(f"  比分标签: {len(tasks[0])} 个 (000-999)")
-        print(f"  24秒倒计时标签: {len(tasks[1])} 个 (00-24)")
-        print(f"  时间标签: {len(tasks[2])} 个 (MM:SS, MM:SS.ms, SS.ms)")
-    print(f"  节次标签: {len(period_labels)} 个")
+    print("数据集生成统计（仅英文和数字）:")
+    print(f"  比分标签: {len(score_labels)} 个 (000-999)")
+    print(f"  24秒倒计时标签: {len(shotclock_labels)} 个 (00-24)")
+    print(f"  时间标签: {len(time_labels)} 个 (MM:SS, MM:SS.ms, SS.ms)")
+    print(f"  节次标签: {len(period_labels)} 个 (仅英文)")
     print(f"  总唯一标签数: {len(all_labels)} 个")
     print("=" * 60)
     
@@ -298,28 +278,72 @@ def main():
 
     # 生成训练集，直接写入对应标签文件夹，文件名用数字
     print("Generating train set...")
-    for label_text in all_labels:
+    total_labels = len(all_labels)
+    generated_count = 0
+    error_count = 0
+    
+    for idx, label_text in enumerate(all_labels, 1):
         safe_folder_name = sanitize_filename(label_text)
         folder_path = os.path.join(args.output_root, 'train', safe_folder_name)
         os.makedirs(folder_path, exist_ok=True)
-        for i in range(args.train_samples):
-            file_name = f"{i:03d}.jpg"
-            full_path = os.path.join(folder_path, file_name)
-            generate_image(label_text, full_path)
-    print("Finished train.")
+        try:
+            for i in range(args.train_samples):
+                file_name = f"{i:03d}.jpg"
+                full_path = os.path.join(folder_path, file_name)
+                generate_image(label_text, full_path)
+            generated_count += 1
+        except Exception as e:
+            print(f"Error generating images for {label_text}: {e}")
+            error_count += 1
+            continue
+            
+        # 每50个标签打印一次进度，更频繁的反馈
+        if idx % 50 == 0:
+            print(f"Progress: {idx}/{total_labels} labels processed (generated: {generated_count}, errors: {error_count})...")
+    
+    print(f"Finished train. Processed {total_labels} labels (successfully generated: {generated_count}, errors: {error_count}).")
 
     # 生成测试集：从训练集中拷贝部分样本
     print("Generating test set (copy from train)...")
-    for label_text in all_labels:
+    total_labels = len(all_labels)
+    copied_count = 0
+    error_count = 0
+    
+    for idx, label_text in enumerate(all_labels, 1):
         safe_folder_name = sanitize_filename(label_text)
         src_folder = os.path.join(args.output_root, 'train', safe_folder_name)
         dst_folder = os.path.join(args.output_root, 'test', safe_folder_name)
+        
+        if not os.path.exists(src_folder):
+            print(f"Warning: Source folder {src_folder} does not exist, skipping...")
+            error_count += 1
+            continue
+            
         os.makedirs(dst_folder, exist_ok=True)
-        files = sorted([f for f in os.listdir(src_folder) if f.lower().endswith('.jpg')])
-        take_n = min(args.test_samples, len(files))
-        for f in files[:take_n]:
-            shutil.copy2(os.path.join(src_folder, f), os.path.join(dst_folder, f))
-    print("Finished test.")
+        try:
+            files = sorted([f for f in os.listdir(src_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+            if not files:
+                print(f"Warning: No image files found in {src_folder}, skipping...")
+                error_count += 1
+                continue
+                
+            take_n = min(args.test_samples, len(files))
+            for f in files[:take_n]:
+                src_path = os.path.join(src_folder, f)
+                dst_path = os.path.join(dst_folder, f)
+                if os.path.exists(src_path):
+                    shutil.copy2(src_path, dst_path)
+            copied_count += 1
+        except Exception as e:
+            print(f"Error copying files for {label_text}: {e}")
+            error_count += 1
+            continue
+            
+        # 每50个标签打印一次进度，更频繁的反馈
+        if idx % 50 == 0:
+            print(f"Progress: {idx}/{total_labels} labels processed (copied: {copied_count}, errors: {error_count})...")
+    
+    print(f"Finished test. Processed {total_labels} labels (successfully copied: {copied_count}, errors: {error_count}).")
 
 if __name__ == "__main__":
     main()

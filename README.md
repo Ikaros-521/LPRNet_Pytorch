@@ -2,14 +2,13 @@
 
 基于LPRNet架构的篮球计分板识别系统（Basketball Scoreboard Recognition System）
 
-本项目基于LPRNet架构改造，用于识别篮球比赛计分板上的各种信息，包括：
+本项目基于LPRNet架构改造，用于识别篮球比赛计分板上的各种信息（仅支持英文和数字）：
 - **比分**：3位数字（如 123）
 - **24秒倒计时**：2位数字（如 24）
 - **倒计时**：分秒、分秒+毫秒（1-3位，如 34:56.7 / 34:56.78 / 34:56.789）
-- **节次**：支持多种格式
-  - 中文：第一节至第十节，加时赛/加时赛1-7，加时一/加时1 等
-  - 数字：第1节、第2节、第3节、第4节…
-  - 英文：FIRST、SECOND、THIRD、FOURTH、OT/OVERTIME/OT1-OT7/OVERTIME1-OVERTIME7
+- **节次**：仅支持英文格式
+  - 英文：FIRST、SECOND、THIRD、FOURTH、OT、OVERTIME
+  - 加时：OT1-OT7、OVERTIME1-OVERTIME7
   - 缩写：1st、2nd、3rd、4th、overtime、ot1-ot7、overtime1-overtime7
 
 # dependencies
@@ -46,7 +45,7 @@ data/
 │   │   └── ...
 │   ├── 12:34:56/         # 标签"12:34:56"（时间）
 │   │   └── ...
-│   ├── 第一节/           # 标签"第一节"（节次）
+│   ├── FIRST/            # 标签"FIRST"（节次，仅英文）
 │   │   └── ...
 │   └── ...
 └── test/
@@ -82,12 +81,11 @@ python test_LPRNet.py --test_img_dirs ./data/test --show true
 
 # 字符集
 
-支持的字符包括：
+支持的字符（仅英文和数字）：
 - 数字：0-9
 - 时间分隔符：`:` (冒号)、`.` (点)
-- 中文节次：第、一、二、三、四、节
-- 英文字母：A-Z（用于FIRST、SECOND等）
-- 小写字母：s、t、n、d、r、h（用于1st、2nd、3rd、4th等）
+- 大写字母：A-Z（用于FIRST、SECOND、OT、OVERTIME等）
+- 小写字母：a-z（用于1st、2nd、3rd、4th、overtime、ot1等）
 
 # 项目结构
 
@@ -112,6 +110,7 @@ python test_LPRNet.py --test_img_dirs ./data/test --show true
 # 注意事项
 
 - 本项目基于LPRNet架构改造，保持了原有的轻量级和高性能特点
-- 字符集已更新为支持篮球计分板识别所需的字符
-- 数据加载器支持多种标签格式
+- **仅支持英文和数字识别**，不支持中文节次
+- 字符集包含：数字0-9、冒号(:)、点(.)、英文字母（大小写）
+- 数据加载器使用直接拉伸到固定尺寸（94x24），保持训练和推理一致
 - 建议根据实际计分板样式调整图片尺寸和最大长度参数

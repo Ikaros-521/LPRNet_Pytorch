@@ -8,30 +8,8 @@ from data.load_data import CHARS, imread_unicode
 from model.LPRNet import build_lprnet
 
 
-def letterbox(img, img_size):
-    """Keep aspect ratio; pad to target size."""
-    tgt_w, tgt_h = img_size
-    h, w = img.shape[:2]
-    if h == 0 or w == 0:
-        raise ValueError("Invalid image size")
-
-    scale = tgt_h / h
-    new_w = int(w * scale)
-    new_h = tgt_h
-    if new_w > tgt_w:
-        scale = tgt_w / w
-        new_w = tgt_w
-        new_h = int(h * scale)
-
-    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    canvas = np.zeros((tgt_h, tgt_w, 3), dtype=resized.dtype)
-    x0 = (tgt_w - new_w) // 2
-    y0 = (tgt_h - new_h) // 2
-    canvas[y0:y0 + new_h, x0:x0 + new_w, :] = resized
-    return canvas
-
-
 def preprocess(img, img_size):
+    """直接拉伸到目标尺寸（与训练保持一致）"""
     img = cv2.resize(img, tuple(img_size), interpolation=cv2.INTER_LINEAR)
     img = img.astype("float32")
     img -= 127.5
@@ -55,8 +33,8 @@ def greedy_decode(logits):
 
 
 def main():
-    # python infer.py --image data_win/test/第一节/000.jpg \
-    #             --pretrained_model weights/Scoreboard__iteration_16000.pth \
+    # python infer.py --image data_win/test/FIRST/000.jpg \
+    #             --pretrained_model weights/Final_Scoreboard_model.pth \
     #             --img_size 94 24 \
     #             --max_len 12
     parser = argparse.ArgumentParser(description="Single image inference for scoreboard")
