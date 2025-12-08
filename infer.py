@@ -18,7 +18,7 @@ def preprocess(img, img_size):
     return torch.from_numpy(img).unsqueeze(0)
 
 
-def greedy_decode(logits):
+def greedy_decode(logits, max_len=None):
     # logits: N x C x W
     probs = logits.softmax(1)
     top = probs.argmax(1)[0].cpu().numpy()  # W
@@ -28,6 +28,9 @@ def greedy_decode(logits):
     for c in top:
         if c != prev and c != blank:
             out.append(CHARS[c])
+            # 可选：截断到最大长度，避免解码出过长结果
+            if max_len is not None and len(out) >= max_len:
+                break
         prev = c
     return "".join(out)
 
@@ -57,7 +60,7 @@ def main():
 
     with torch.no_grad():
         logits = net(inp)  # N x C x W
-    text = greedy_decode(logits)
+    text = greedy_decode(logits, max_len=args.max_len)
 
     print(f"[Result] {os.path.basename(args.image)} -> {text}")
 

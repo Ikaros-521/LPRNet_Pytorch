@@ -39,22 +39,6 @@ COLORS = [
 
 # ================= 标签定义 =================
 
-def get_period_labels(cn_only=False):
-    """
-    节次标签（仅英文和数字）
-    移除所有中文标签，只保留英文和数字格式
-    """
-    labels = []
-    # 英文：FIRST, SECOND, THIRD, FOURTH, OT, OVERTIME, OT1-OT7, OVERTIME1-7
-    labels.extend(["FIRST", "SECOND", "THIRD", "FOURTH", "OT", "OVERTIME"])
-    labels.extend([f"OT{i}" for i in range(1, 8)])
-    labels.extend([f"OVERTIME{i}" for i in range(1, 8)])
-    # 缩写：1st, 2nd, 3rd, 4th, overtime, ot1-ot7, overtime1-7
-    labels.extend(["1st", "2nd", "3rd", "4th", "overtime"])
-    labels.extend([f"ot{i}" for i in range(1, 8)])
-    labels.extend([f"overtime{i}" for i in range(1, 8)])
-    return labels
-
 def get_score_labels():
     # 000-999 (3位数字比分，覆盖所有可能)
     return [f"{i:03d}" for i in range(1000)]
@@ -64,33 +48,13 @@ def get_shotclock_labels():
     return [f"{i:02d}" for i in range(25)]
 
 def get_time_labels():
+    """生成时间标签，仅支持 MM:SS 格式（不包含毫秒）"""
     labels = set()
 
     # MM:SS 格式（分秒）
     for m in range(13):  # 0-12分钟
-        for s in range(0, 60, 5):  # 每5秒一个，覆盖常见时间
+        for s in range(60):  # 0-59秒，覆盖所有时间
             labels.add(f"{m:02d}:{s:02d}")
-
-    def add_ms(prefix: str):
-        """为给定前缀添加 1/2/3 位毫秒"""
-        for width in (1, 2, 3):
-            if width == 1:
-                values = range(10)  # 0-9
-            elif width == 2:
-                values = list(range(0, 100, 10)) + [11, 33, 59, 88]
-            else:
-                values = list(range(0, 1000, 100)) + [123, 456, 789]
-            for ms in values:
-                labels.add(f"{prefix}.{ms:0{width}d}")
-
-    # MM:SS.ms / .mm / .mmm
-    for m in range(13):
-        for s in [0, 10, 20, 30, 40, 50, 59]:  # 常见关键秒
-            add_ms(f"{m:02d}:{s:02d}")
-
-    # SS.ms / .mm / .mmm 仅秒部分（最后一分钟）
-    for s in range(60):
-        add_ms(f"{s:02d}")
 
     return list(labels)
 
@@ -171,7 +135,12 @@ def save_image_unicode(img_cv, save_path, ext=".jpg"):
 
 
 def generate_image(text, save_path):
-    img_h = 64
+    # 原项目定义的图像尺寸：宽度94，高度24
+    TARGET_WIDTH = 94
+    TARGET_HEIGHT = 24
+    
+    # 使用较大的临时画布来绘制文本，然后缩放
+    temp_h = 64
     font_size = random.randint(40, 50)
     kerning = random.randint(-5, 2) # 粘连控制
     
@@ -181,12 +150,12 @@ def generate_image(text, save_path):
     font_ms = load_font(text, ms_font_size)
 
     temp_w = int(font_size * 0.85 * len(text)) + 60
-    img_pil = Image.new('RGB', (temp_w, img_h), (0, 0, 0))
+    img_pil = Image.new('RGB', (temp_w, temp_h), (0, 0, 0))
     draw = ImageDraw.Draw(img_pil)
     color = random.choice(COLORS)
     
     current_x = 10
-    y_main = (img_h - font_size) // 2 - 5
+    y_main = (temp_h - font_size) // 2 - 5
     y_ms = y_main + (font_size - ms_font_size) // 2  # 让毫秒稍微靠上保持对齐
 
     after_dot = False
@@ -206,14 +175,18 @@ def generate_image(text, save_path):
         if char == '.':
             after_dot = True
     
-    # Crop
+    # Crop 到文本边界
     bbox = img_pil.getbbox()
     if bbox:
         left, top, right, bottom = bbox
-        img_pil = img_pil.crop((left-5, 0, right+5, img_h))
+        img_pil = img_pil.crop((left-5, 0, right+5, temp_h))
     
+    # 转换为OpenCV格式并应用增强
     img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
     img_cv = apply_augmentations(img_cv)
+    
+    # 统一调整到目标尺寸 94x24（直接拉伸，保持训练和推理一致）
+    img_cv = cv2.resize(img_cv, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_LINEAR)
     
     # 确保目录存在
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -251,12 +224,12 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # 准备任务（仅英文和数字）
+    # 准备任务（仅数字、冒号和点）
     score_labels = get_score_labels()
     shotclock_labels = get_shotclock_labels()
     time_labels = get_time_labels()
-    period_labels = get_period_labels()  # 只生成英文节次
-    tasks = [score_labels, shotclock_labels, time_labels, period_labels]
+    # 移除节次标签（包含英文字母）
+    tasks = [score_labels, shotclock_labels, time_labels]
 
     all_labels = set()
     for t in tasks:
@@ -264,11 +237,10 @@ def main():
     
     # 打印统计信息
     print("=" * 60)
-    print("数据集生成统计（仅英文和数字）:")
+    print("数据集生成统计（仅数字、冒号和点）:")
     print(f"  比分标签: {len(score_labels)} 个 (000-999)")
     print(f"  24秒倒计时标签: {len(shotclock_labels)} 个 (00-24)")
     print(f"  时间标签: {len(time_labels)} 个 (MM:SS, MM:SS.ms, SS.ms)")
-    print(f"  节次标签: {len(period_labels)} 个 (仅英文)")
     print(f"  总唯一标签数: {len(all_labels)} 个")
     print("=" * 60)
     
