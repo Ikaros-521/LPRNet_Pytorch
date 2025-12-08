@@ -2,8 +2,8 @@
 # /usr/bin/env/python3
 
 '''
-test pretrained model.
-Author: aiboy.wei@outlook.com .
+Test pretrained basketball scoreboard recognition model.
+基于LPRNet架构的篮球计分板识别测试脚本
 '''
 
 from data.load_data import CHARS, CHARS_DICT, LPRDataLoader
@@ -23,19 +23,24 @@ import cv2
 import os
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='parameters to train net')
-    parser.add_argument('--img_size', default=[94, 24], help='the image size')
+    parser = argparse.ArgumentParser(description='parameters to test basketball scoreboard recognition net')
+    # 默认输入分辨率（与模型设计匹配）
+    parser.add_argument('--img_size', default=[94, 24], help='the image size [width, height]')
     parser.add_argument('--test_img_dirs', default="./data/test", help='the test images path')
     parser.add_argument('--dropout_rate', default=0, help='dropout rate.')
-    parser.add_argument('--lpr_max_len', default=8, help='license plate number max length.')
+    parser.add_argument('--max_len', default=12, help='maximum text length')
+    parser.add_argument('--lpr_max_len', default=12, help='maximum text length (backward compatibility)')
     parser.add_argument('--test_batch_size', default=100, help='testing batch size.')
     parser.add_argument('--phase_train', default=False, type=bool, help='train or test phase flag.')
     parser.add_argument('--num_workers', default=8, type=int, help='Number of workers used in dataloading')
     parser.add_argument('--cuda', default=True, type=bool, help='Use cuda to train model')
     parser.add_argument('--show', default=False, type=bool, help='show test image and its predict result or not.')
-    parser.add_argument('--pretrained_model', default='./weights/Final_LPRNet_model.pth', help='pretrained base model')
+    parser.add_argument('--pretrained_model', default='./weights/Final_Scoreboard_model.pth', help='pretrained base model')
 
     args = parser.parse_args()
+    # 保持向后兼容
+    if not hasattr(args, 'max_len') or args.max_len == 12:
+        args.max_len = args.lpr_max_len
 
     return args
 
@@ -55,21 +60,22 @@ def collate_fn(batch):
 def test():
     args = get_parser()
 
-    lprnet = build_lprnet(lpr_max_len=args.lpr_max_len, phase=args.phase_train, class_num=len(CHARS), dropout_rate=args.dropout_rate)
+    max_len = getattr(args, 'max_len', args.lpr_max_len)
+    lprnet = build_lprnet(lpr_max_len=max_len, phase=args.phase_train, class_num=len(CHARS), dropout_rate=args.dropout_rate)
     device = torch.device("cuda:0" if args.cuda else "cpu")
     lprnet.to(device)
     print("Successful to build network!")
 
     # load pretrained model
-    if args.pretrained_model:
-        lprnet.load_state_dict(torch.load(args.pretrained_model))
+    if args.pretrained_model and os.path.exists(args.pretrained_model):
+        lprnet.load_state_dict(torch.load(args.pretrained_model, map_location=device))
         print("load pretrained model successful!")
     else:
-        print("[Error] Can't found pretrained mode, please check!")
+        print(f"[Error] Can't found pretrained model at {args.pretrained_model}, please check!")
         return False
 
     test_img_dirs = os.path.expanduser(args.test_img_dirs)
-    test_dataset = LPRDataLoader(test_img_dirs.split(','), args.img_size, args.lpr_max_len)
+    test_dataset = LPRDataLoader(test_img_dirs.split(','), args.img_size, max_len)
     try:
         Greedy_Decode_Eval(lprnet, test_dataset, args)
     finally:
@@ -93,7 +99,8 @@ def Greedy_Decode_Eval(Net, datasets, args):
             label = labels[start:start+length]
             targets.append(label)
             start += length
-        targets = np.array([el.numpy() for el in targets])
+        # 保持可变长列表，避免 np.array 触发填充错误
+        targets = [el.numpy() for el in targets]
         imgs = images.numpy().copy()
 
         if args.cuda:

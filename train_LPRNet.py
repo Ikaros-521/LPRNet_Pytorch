@@ -2,8 +2,12 @@
 # /usr/bin/env/python3
 
 '''
-Pytorch implementation for LPRNet.
-Author: aiboy.wei@outlook.com .
+Pytorch implementation for Basketball Scoreboard Recognition.
+基于LPRNet架构改造，用于识别篮球计分板信息：
+- 比分（3位数字）
+- 24秒倒计时（2位数字）
+- 倒计时（时分秒、时分秒毫秒）
+- 节次（第一节、第1节、FIRST、1st等）
 '''
 
 from data.load_data import CHARS, CHARS_DICT, LPRDataLoader
@@ -47,30 +51,52 @@ def adjust_learning_rate(optimizer, cur_epoch, base_lr, lr_schedule):
     return lr
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='parameters to train net')
-    parser.add_argument('--max_epoch', default=15, help='epoch to train the network')
-    parser.add_argument('--img_size', default=[94, 24], help='the image size')
-    parser.add_argument('--train_img_dirs', default="~/workspace/trainMixLPR", help='the train images path')
-    parser.add_argument('--test_img_dirs', default="~/workspace/testMixLPR", help='the test images path')
+    parser = argparse.ArgumentParser(description='parameters to train basketball scoreboard recognition net')
+    # 训练轮数
+    parser.add_argument('--max_epoch', default=25, help='epoch to train the network')
+    # 默认输入分辨率（与模型设计匹配）
+    parser.add_argument('--img_size', default=[94, 24], help='the image size [width, height]')
+    # 训练图片目录
+    parser.add_argument('--train_img_dirs', default="./data/train", help='the train images path')
+    # 测试图片目录
+    parser.add_argument('--test_img_dirs', default="./data/test", help='the test images path')
+    # Dropout率
     parser.add_argument('--dropout_rate', default=0.5, help='dropout rate.')
-    parser.add_argument('--learning_rate', default=0.1, help='base value of learning rate.')
-    parser.add_argument('--lpr_max_len', default=8, help='license plate number max length.')
+    # 学习率
+    parser.add_argument('--learning_rate', default=0.01, help='base value of learning rate.')
+    # 最大文本长度
+    parser.add_argument('--max_len', default=12, help='maximum text length (比分最长3位，时间最长如12:34:56.789，节次最长如"第一节"等)')
+    # 训练批次大小
     parser.add_argument('--train_batch_size', default=128, help='training batch size.')
+    # 测试批次大小
     parser.add_argument('--test_batch_size', default=120, help='testing batch size.')
+    # 训练或测试阶段标志
     parser.add_argument('--phase_train', default=True, type=bool, help='train or test phase flag.')
+    # 数据加载线程数
     parser.add_argument('--num_workers', default=8, type=int, help='Number of workers used in dataloading')
+    # 是否使用GPU训练
     parser.add_argument('--cuda', default=True, type=bool, help='Use cuda to train model')
+    # 恢复训练的迭代次数
     parser.add_argument('--resume_epoch', default=0, type=int, help='resume iter for retraining')
-    parser.add_argument('--save_interval', default=2000, type=int, help='interval for save model state dict')
-    parser.add_argument('--test_interval', default=2000, type=int, help='interval for evaluate')
+    # 保存模型状态字典的间隔
+    parser.add_argument('--save_interval', default=4000, type=int, help='interval for save model state dict')
+    # 评估模型的间隔
+    parser.add_argument('--test_interval', default=1000, type=int, help='interval for evaluate')
+    # 动量
     parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
+    # 权重衰减
     parser.add_argument('--weight_decay', default=2e-5, type=float, help='Weight decay for SGD')
-    parser.add_argument('--lr_schedule', default=[4, 8, 12, 14, 16], help='schedule for learning rate.')
+    # 学习率衰减计划（更长训练，更多衰减节点）
+    parser.add_argument('--lr_schedule', default=[8, 12, 16, 20, 23], help='schedule for learning rate.')
+    # 保存模型状态字典的文件夹
     parser.add_argument('--save_folder', default='./weights/', help='Location to save checkpoint models')
-    # parser.add_argument('--pretrained_model', default='./weights/Final_LPRNet_model.pth', help='pretrained base model')
+    # 预训练模型
     parser.add_argument('--pretrained_model', default='', help='pretrained base model')
 
     args = parser.parse_args()
+    # 保持向后兼容
+    if not hasattr(args, 'lpr_max_len'):
+        args.lpr_max_len = args.max_len
 
     return args
 
@@ -83,21 +109,23 @@ def collate_fn(batch):
         imgs.append(torch.from_numpy(img))
         labels.extend(label)
         lengths.append(length)
-    labels = np.asarray(labels).flatten().astype(np.int)
+    labels = np.asarray(labels).flatten().astype(np.int64)
 
     return (torch.stack(imgs, 0), torch.from_numpy(labels), lengths)
 
 def train():
     args = get_parser()
 
-    T_length = 18 # args.lpr_max_len
+    T_length = 18  # CTC序列长度，通常设为max_len的1.5-2倍
     epoch = 0 + args.resume_epoch
     loss_val = 0
 
     if not os.path.exists(args.save_folder):
         os.mkdir(args.save_folder)
 
-    lprnet = build_lprnet(lpr_max_len=args.lpr_max_len, phase=args.phase_train, class_num=len(CHARS), dropout_rate=args.dropout_rate)
+    # 使用max_len参数，如果没有则使用lpr_max_len（向后兼容）
+    max_len = getattr(args, 'max_len', args.lpr_max_len)
+    lprnet = build_lprnet(lpr_max_len=max_len, phase=args.phase_train, class_num=len(CHARS), dropout_rate=args.dropout_rate)
     device = torch.device("cuda:0" if args.cuda else "cpu")
     lprnet.to(device)
     print("Successful to build network!")
@@ -131,8 +159,9 @@ def train():
                          momentum=args.momentum, weight_decay=args.weight_decay)
     train_img_dirs = os.path.expanduser(args.train_img_dirs)
     test_img_dirs = os.path.expanduser(args.test_img_dirs)
-    train_dataset = LPRDataLoader(train_img_dirs.split(','), args.img_size, args.lpr_max_len)
-    test_dataset = LPRDataLoader(test_img_dirs.split(','), args.img_size, args.lpr_max_len)
+    max_len = getattr(args, 'max_len', args.lpr_max_len)
+    train_dataset = LPRDataLoader(train_img_dirs.split(','), args.img_size, max_len)
+    test_dataset = LPRDataLoader(test_img_dirs.split(','), args.img_size, max_len)
 
     epoch_size = len(train_dataset) // args.train_batch_size
     max_iter = args.max_epoch * epoch_size
@@ -152,7 +181,7 @@ def train():
             epoch += 1
 
         if iteration !=0 and iteration % args.save_interval == 0:
-            torch.save(lprnet.state_dict(), args.save_folder + 'LPRNet_' + '_iteration_' + repr(iteration) + '.pth')
+            torch.save(lprnet.state_dict(), args.save_folder + 'Scoreboard_' + '_iteration_' + repr(iteration) + '.pth')
 
         if (iteration + 1) % args.test_interval == 0:
             Greedy_Decode_Eval(lprnet, test_dataset, args)
@@ -200,7 +229,7 @@ def train():
     Greedy_Decode_Eval(lprnet, test_dataset, args)
 
     # save final parameters
-    torch.save(lprnet.state_dict(), args.save_folder + 'Final_LPRNet_model.pth')
+    torch.save(lprnet.state_dict(), args.save_folder + 'Final_Scoreboard_model.pth')
 
 def Greedy_Decode_Eval(Net, datasets, args):
     # TestNet = Net.eval()
@@ -220,7 +249,8 @@ def Greedy_Decode_Eval(Net, datasets, args):
             label = labels[start:start+length]
             targets.append(label)
             start += length
-        targets = np.array([el.numpy() for el in targets])
+        # targets 的长度不一致，保持为 list/可变长数组，避免 np.array 自动填充失败
+        targets = [el.numpy() for el in targets]
 
         if args.cuda:
             images = Variable(images.cuda())

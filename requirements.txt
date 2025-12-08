@@ -1,0 +1,7 @@
+torch
+torchvision
+# opencv-python
+imutils
+pillow
+numpy
+
