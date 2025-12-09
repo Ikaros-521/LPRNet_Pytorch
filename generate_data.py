@@ -55,6 +55,9 @@ def get_time_labels():
     for m in range(13):  # 0-12分钟
         for s in range(60):  # 0-59秒，覆盖所有时间
             labels.add(f"{m:02d}:{s:02d}")
+            # 额外加入单数字分钟格式（M:SS），满足「分钟只有一个数字」的需求
+            if m < 10:
+                labels.add(f"{m}:{s:02d}")
 
     return list(labels)
 
@@ -217,6 +220,8 @@ def parse_args():
                         help="输出根目录")
     parser.add_argument("--clean", action="store_true",
                         help="生成前清空输出目录")
+    parser.add_argument("--append", action="store_true",
+                        help="追加生成：保留已存在的图片，若数量不足则补齐")
     return parser.parse_args()
 
 # ================= 主程序 =================
@@ -237,10 +242,10 @@ def main():
     
     # 打印统计信息
     print("=" * 60)
-    print("数据集生成统计（仅数字、冒号和点）:")
+    print("数据集生成统计（仅数字、冒号）:")
     print(f"  比分标签: {len(score_labels)} 个 (000-999)")
     print(f"  24秒倒计时标签: {len(shotclock_labels)} 个 (00-24)")
-    print(f"  时间标签: {len(time_labels)} 个 (MM:SS, MM:SS.ms, SS.ms)")
+    print(f"  时间标签: {len(time_labels)} 个 (MM:SS + M:SS)")
     print(f"  总唯一标签数: {len(all_labels)} 个")
     print("=" * 60)
     
@@ -259,8 +264,14 @@ def main():
         folder_path = os.path.join(args.output_root, 'train', safe_folder_name)
         os.makedirs(folder_path, exist_ok=True)
         try:
-            for i in range(args.train_samples):
-                file_name = f"{i:03d}.jpg"
+            # 追加模式：如果已有样本则保留，只补足缺的数量
+            existing_files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+            existing_count = len(existing_files)
+            start_idx = existing_count if args.append else 0
+            need = max(args.train_samples - existing_count, 0) if args.append else args.train_samples
+
+            for i in range(need):
+                file_name = f"{start_idx + i:03d}.jpg"
                 full_path = os.path.join(folder_path, file_name)
                 generate_image(label_text, full_path)
             generated_count += 1

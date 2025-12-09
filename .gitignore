@@ -175,3 +175,5 @@ data_win/
 2.png
 3.png
 4.png
+validation_results/failed_cases.json
+validation_results/summary.json

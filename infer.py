@@ -36,10 +36,7 @@ def greedy_decode(logits, max_len=None):
 
 
 def main():
-    # python infer.py --image data_win/test/FIRST/000.jpg \
-    #             --pretrained_model weights/Final_Scoreboard_model.pth \
-    #             --img_size 94 24 \
-    #             --max_len 12
+    # python infer.py --image data_win/test/00_01/000.jpg --pretrained_model weights/Final_Scoreboard_model.pth --max_len 5
     parser = argparse.ArgumentParser(description="Single image inference for scoreboard")
     parser.add_argument("--image", required=True, help="path to image")
     parser.add_argument("--pretrained_model", required=True, help="path to weights")

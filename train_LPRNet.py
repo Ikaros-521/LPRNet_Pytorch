@@ -84,7 +84,7 @@ def get_parser():
     # 恢复训练的迭代次数
     parser.add_argument('--resume_epoch', default=0, type=int, help='resume iter for retraining')
     # 保存模型状态字典的间隔
-    parser.add_argument('--save_interval', default=4000, type=int, help='interval for save model state dict')
+    parser.add_argument('--save_interval', default=1000, type=int, help='interval for save model state dict')
     # 评估模型的间隔
     parser.add_argument('--test_interval', default=1000, type=int, help='interval for evaluate')
     # 动量
