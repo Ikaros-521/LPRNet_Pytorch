@@ -18,21 +18,41 @@ def preprocess(img, img_size):
     return torch.from_numpy(img).unsqueeze(0)
 
 
-def greedy_decode(logits, max_len=None):
+def greedy_decode(logits, max_len=None, return_confidence=False):
+    """
+    贪婪解码：将模型输出转换为文本
+    logits: N x C x W (batch_size x num_classes x width)
+    return_confidence: 是否返回置信度
+    返回: 文本字符串，或 (文本字符串, 置信度)
+    """
     # logits: N x C x W
     probs = logits.softmax(1)
     top = probs.argmax(1)[0].cpu().numpy()  # W
+    top_probs = probs[0].max(dim=0)[0].cpu().numpy()  # W，每个位置的最大概率
+    
     blank = len(CHARS) - 1
     out = []
+    confidences = []  # 存储每个字符的置信度
     prev = blank
-    for c in top:
+    for idx, c in enumerate(top):
         if c != prev and c != blank:
             out.append(CHARS[c])
+            confidences.append(float(top_probs[idx]))  # 记录该字符位置的置信度
             # 可选：截断到最大长度，避免解码出过长结果
             if max_len is not None and len(out) >= max_len:
                 break
         prev = c
-    return "".join(out)
+    
+    text = "".join(out)
+    
+    if return_confidence:
+        # 计算平均置信度
+        avg_confidence = float(np.mean(confidences)) if confidences else 0.0
+        # 计算最小置信度（最不确信的字符）
+        min_confidence = float(np.min(confidences)) if confidences else 0.0
+        return text, avg_confidence, min_confidence
+    else:
+        return text
 
 
 def main():
@@ -57,9 +77,10 @@ def main():
 
     with torch.no_grad():
         logits = net(inp)  # N x C x W
-    text = greedy_decode(logits, max_len=args.max_len)
+    text, avg_conf, min_conf = greedy_decode(logits, max_len=args.max_len, return_confidence=True)
 
     print(f"[Result] {os.path.basename(args.image)} -> {text}")
+    print(f"  Confidence: {avg_conf:.4f} (avg), {min_conf:.4f} (min)")
 
 
 if __name__ == "__main__":

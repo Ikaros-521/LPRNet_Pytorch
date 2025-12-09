@@ -32,32 +32,47 @@ def collate_fn(batch):
     return imgs, labels, lengths
 
 
-def greedy_decode(logits, max_len=None):
+def greedy_decode(logits, max_len=None, return_confidence=False):
     """
     贪婪解码：将模型输出转换为文本
     logits: N x C x W (batch_size x num_classes x width)
+    return_confidence: 是否返回置信度
+    返回: 文本列表，或 (文本列表, 置信度列表)
     """
     probs = torch.softmax(logits, dim=1)  # N x C x W
     blank = len(CHARS) - 1
     
     results = []
+    confidences_list = []
+    
     for i in range(logits.shape[0]):
-        # 获取每个时间步的最大概率类别
+        # 获取每个时间步的最大概率类别和概率值
         top = probs[i].argmax(dim=0).cpu().numpy()  # W
+        top_probs = probs[i].max(dim=0)[0].cpu().numpy()  # W，每个位置的最大概率
         
         # 去重和去空白
         out = []
+        confidences = []
         prev = blank
-        for c in top:
+        for idx, c in enumerate(top):
             if c != prev and c != blank:
                 out.append(CHARS[c])
+                confidences.append(float(top_probs[idx]))  # 记录该字符位置的置信度
                 if max_len is not None and len(out) >= max_len:
                     break
             prev = c
         
         results.append("".join(out))
+        if return_confidence:
+            # 计算平均置信度和最小置信度
+            avg_conf = float(np.mean(confidences)) if confidences else 0.0
+            min_conf = float(np.min(confidences)) if confidences else 0.0
+            confidences_list.append((avg_conf, min_conf))
     
-    return results
+    if return_confidence:
+        return results, confidences_list
+    else:
+        return results
 
 
 def label_to_string(label_indices):
@@ -109,7 +124,7 @@ def validate_dataset(model, dataset, args, device):
                 images = images
             
             logits = model(images)  # N x C x W
-            pred_labels = greedy_decode(logits, max_len=args.max_len)
+            pred_labels, pred_confidences = greedy_decode(logits, max_len=args.max_len, return_confidence=True)
             
             # 比对结果
             batch_size = len(true_labels)
@@ -117,6 +132,7 @@ def validate_dataset(model, dataset, args, device):
                 total += 1
                 true_label = true_labels[i]
                 pred_label = pred_labels[i]
+                avg_conf, min_conf = pred_confidences[i]
                 
                 # 统计该标签的准确率
                 label_stats[true_label]['total'] += 1
@@ -133,7 +149,9 @@ def validate_dataset(model, dataset, args, device):
                         failed_cases.append({
                             'image_path': img_path,
                             'true_label': true_label,
-                            'pred_label': pred_label
+                            'pred_label': pred_label,
+                            'confidence_avg': avg_conf,
+                            'confidence_min': min_conf
                         })
                 
                 global_idx += 1
@@ -228,6 +246,14 @@ def main():
             json.dump(results['failed_cases'], f, ensure_ascii=False, indent=2)
         print(f"失败案例已保存到: {failed_file}")
         print(f"失败案例数: {len(results['failed_cases'])}")
+        
+        # 统计失败案例的置信度信息
+        if results['failed_cases'] and 'confidence_avg' in results['failed_cases'][0]:
+            conf_avgs = [case['confidence_avg'] for case in results['failed_cases']]
+            conf_mins = [case['confidence_min'] for case in results['failed_cases']]
+            print(f"失败案例置信度统计:")
+            print(f"  平均置信度: {np.mean(conf_avgs):.4f} (avg), {np.min(conf_avgs):.4f} (min), {np.max(conf_avgs):.4f} (max)")
+            print(f"  最小置信度: {np.mean(conf_mins):.4f} (avg), {np.min(conf_mins):.4f} (min), {np.max(conf_mins):.4f} (max)")
         
         # 如果启用，复制失败图片
         if args.save_failed_images:

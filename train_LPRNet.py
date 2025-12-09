@@ -364,4 +364,5 @@ def Greedy_Decode_Eval(Net, datasets, args):
 
 
 if __name__ == "__main__":
+    # python train_LPRNet.py --train_img_dirs ./data_win/train --test_img_dirs  ./data_win/test --max_len 5 --max_epoch 30 --train_batch_size 256 --pretrained_model weights/Final_Scoreboard_model.pth
     train()
