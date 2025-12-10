@@ -56,12 +56,12 @@ def greedy_decode(logits, max_len=None, return_confidence=False):
 
 
 def main():
-    # python infer.py --image data_win/test/00_01/000.jpg --pretrained_model weights/Final_Scoreboard_model.pth --max_len 5
+    
     parser = argparse.ArgumentParser(description="Single image inference for scoreboard")
     parser.add_argument("--image", required=True, help="path to image")
     parser.add_argument("--pretrained_model", required=True, help="path to weights")
     parser.add_argument("--img_size", default=[94, 24], nargs=2, type=int, help="model input size [w h]")
-    parser.add_argument("--max_len", default=12, type=int, help="max length (for model build)")
+    parser.add_argument("--max_len", default=5, type=int, help="max length (for model build)")
     parser.add_argument("--cuda", action="store_true", help="use cuda")
     args = parser.parse_args()
 
@@ -84,5 +84,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # python infer.py --image data_win/test/00_01/000.jpg --pretrained_model weights/Final_Scoreboard_model.pth --max_len 5
     main()
 

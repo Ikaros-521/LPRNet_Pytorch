@@ -12,16 +12,71 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 OUTPUT_ROOT = "data_win" # 修改一下输出目录名，避免混淆
 
 # 每个类别生成的图片数量
-SAMPLES_PER_CLASS_TRAIN = 20
-SAMPLES_PER_CLASS_TEST = 5
+SAMPLES_PER_CLASS_TRAIN = 100
+# 每类测试样本数
+SAMPLES_PER_CLASS_TEST = 25
 
 # 字体路径配置 (请将字体文件放在 fonts 文件夹下)
 # Windows下如果没有这些字体，脚本会自动回退到默认字体(虽然丑但能跑)
+#
+# 字体类型说明：
+# 1. FONT_NORMAL: 正常数字字体（Arial, Times New Roman, Verdana 等系统常见字体）
+# 2. FONT_DIGITAL: 数字显示字体（7段数码管风格，如 digital-7, DS-DIGI 等）
+# 3. FONT_DOT_MATRIX: 点阵字体（由点阵组成的数字，模拟LED点阵屏效果）
+# 4. FONT_LED_DOT: LED灯珠字体（由小圆点/灯珠组成的数字，模拟LED显示屏）
+#
+# 字体文件获取建议：
+# - 正常字体：Windows系统自带或从网上下载常见字体
+# - 数字字体：可在 dafont.com, fontsquirrel.com 等网站搜索 "digital", "LCD", "LED" 等关键词
+# - 点阵字体：搜索 "dot matrix font", "pixel font" 等
+# - LED灯珠字体：搜索 "LED dot font", "dot LED display font" 等
+
+# 正常数字字体（系统常见字体）
+FONT_NORMAL = [
+    "arial.ttf",           # Arial
+    "arialbd.ttf",         # Arial Bold
+    "times.ttf",           # Times New Roman
+    "timesbd.ttf",         # Times New Roman Bold
+    "verdana.ttf",         # Verdana
+    "verdanab.ttf",        # Verdana Bold
+    "calibri.ttf",         # Calibri
+    "calibrib.ttf",        # Calibri Bold
+    "fonts/TimesNewRoman.ttf",
+    "fonts/Verdana.ttf"
+]
+
+# 数字显示字体（7段数码管风格）
 FONT_DIGITAL = [
     "fonts/digital-7-mono-3.ttf", 
     "fonts/DS-DIGI.TTF",
-    "arial.ttf"
+    "fonts/DS-DIGIB.TTF",
+    "fonts/LED.ttf",
 ]
+
+# 点阵字体（Dot Matrix Fonts）
+FONT_DOT_MATRIX = [
+    "fonts/DotMatrix.ttf",
+    "fonts/lcddot_tr.ttf",
+    "fonts/dotty.ttf",
+    "fonts/Pixel-lcd-machine.ttf",
+]
+
+# LED 灯珠字体（由小圆点组成的数字）
+FONT_LED_DOT = [
+    "fonts/led-dot.ttf",
+    "fonts/LED-Dot-Matrix.ttf",
+    "fonts/The-Led-Display-St.ttf",
+    "fonts/led-dot-display.ttf",
+]
+
+# 所有字体类型（用于随机选择）
+ALL_FONT_TYPES = [
+    ("normal", FONT_NORMAL),
+    ("digital", FONT_DIGITAL),
+    ("dot_matrix", FONT_DOT_MATRIX),
+    ("led_dot", FONT_LED_DOT)
+]
+
 FONT_CHINESE = [
     "simhei.ttf",  # Windows 自带黑体
     "msyh.ttf"     # Windows 自带微软雅黑
@@ -63,16 +118,47 @@ def get_time_labels():
 
 # ================= 图像处理核心 =================
 
-def load_font(text, size):
+def load_font(text, size, font_type=None):
     """
-    加载字体（仅英文和数字，使用数字字体）
+    加载字体（支持多种字体类型）
+    
+    Args:
+        text: 要渲染的文本
+        size: 字体大小
+        font_type: 字体类型 ('normal', 'digital', 'dot_matrix', 'led_dot')，如果为None则随机选择
     """
-    # 尝试加载数字字体
-    for f_path in FONT_DIGITAL:
+    # 如果未指定字体类型，随机选择一种
+    if font_type is None:
+        font_type = random.choice(["normal", "digital", "dot_matrix", "led_dot"])
+    
+    # 根据字体类型选择字体列表
+    font_map = {
+        "normal": FONT_NORMAL,
+        "digital": FONT_DIGITAL,
+        "dot_matrix": FONT_DOT_MATRIX,
+        "led_dot": FONT_LED_DOT
+    }
+    
+    font_list = font_map.get(font_type, FONT_NORMAL)
+    
+    # 尝试加载指定类型的字体
+    for f_path in font_list:
         try:
-            return ImageFont.truetype(f_path, size)
+            if os.path.exists(f_path):
+                return ImageFont.truetype(f_path, size)
         except:
             continue
+    
+    # 如果指定类型都失败，尝试其他类型
+    for font_type_name, fonts in ALL_FONT_TYPES:
+        if font_type_name == font_type:
+            continue
+        for f_path in fonts:
+            try:
+                if os.path.exists(f_path):
+                    return ImageFont.truetype(f_path, size)
+            except:
+                continue
     
     # 如果都失败，尝试系统字体
     try:
@@ -128,6 +214,16 @@ def apply_augmentations(cv_img):
         alpha = random.uniform(0.15, 0.35)
         cv_img = cv2.addWeighted(cv_img, 1.0, glow, alpha, 0)
 
+    # 7. 亮度调节（模拟不同光照条件）
+    if random.random() > 0.2:  # 80%概率应用亮度调节
+        brightness_delta = random.uniform(-40, 40)  # 亮度调整范围：-40到+40
+        cv_img = cv2.convertScaleAbs(cv_img, alpha=1.0, beta=brightness_delta)
+
+    # 8. 对比度调节（模拟不同显示效果）
+    if random.random() > 0.2:  # 80%概率应用对比度调节
+        contrast_alpha = random.uniform(0.7, 1.3)  # 对比度系数：0.7到1.3
+        cv_img = cv2.convertScaleAbs(cv_img, alpha=contrast_alpha, beta=0)
+
     return cv_img
 
 def save_image_unicode(img_cv, save_path, ext=".jpg"):
@@ -147,10 +243,13 @@ def generate_image(text, save_path):
     font_size = random.randint(40, 50)
     kerning = random.randint(-5, 2) # 粘连控制
     
-    # 主体字体与毫秒字体（毫秒更小）
-    font_main = load_font(text, font_size)
+    # 随机选择字体类型（正常、数字、点阵、LED灯珠）
+    font_type = random.choice(["normal", "digital", "dot_matrix", "led_dot"])
+    
+    # 主体字体与毫秒字体（毫秒更小，使用相同字体类型保持一致性）
+    font_main = load_font(text, font_size, font_type=font_type)
     ms_font_size = max(20, int(font_size * random.uniform(0.55, 0.8)))
-    font_ms = load_font(text, ms_font_size)
+    font_ms = load_font(text, ms_font_size, font_type=font_type)
 
     temp_w = int(font_size * 0.85 * len(text)) + 60
     img_pil = Image.new('RGB', (temp_w, temp_h), (0, 0, 0))
